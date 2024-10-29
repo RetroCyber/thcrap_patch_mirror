@@ -289,7 +289,7 @@ def IsRepoOrServer(url):
         log.error(f"{str(e)}")
         sys.exit(1)
 
-#枚举 repo 包含的 patch ，并返回 patch 列表
+# 枚举 repo 包含的 patch ，并返回 patch 列表
 def enumerate_patch(url):
     """
     从指定URL获取JSON数据并解析，输出其中所包含的补丁(patch)，并返回补丁列表
@@ -312,6 +312,107 @@ def enumerate_patch(url):
         print(f"{i}: {patch} - {description}")
     print("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -")
     return list(patches.keys())
+
+# 将不需要定期镜像的 patch 从镜像列表删除，以减少镜像开销。
+def delete_mirror_item(mirror_dir, repo_id, patch):
+    # 构造出 version_dir 路径
+    version_dir = os.path.join(mirror_dir, '.version')
+    
+    # 构造出 repo_id.json 的完整路径
+    fv_path = os.path.join(version_dir, f'{repo_id}.json')
+    
+    # 检查 repo_id.json 文件是否存在
+    if os.path.exists(fv_path):
+        with open(fv_path, 'r') as file:
+            data = json.load(file)
+        
+        # 检查并删除 patches 中的对应项
+        if 'patches' in data and patch in data['patches']:
+            del data['patches'][patch]
+        
+        # 如果 patches 为空，则删除整个 repo_id.json 文件
+        if not data.get('patches'):
+            os.remove(fv_path)
+        else:
+            # 如果有其它内容，写回文件
+            with open(fv_path, 'w') as file:
+                json.dump(data, file, indent=4)
+    
+    # 检查 .version 文件夹是否为空
+    if os.path.isdir(version_dir) and not os.listdir(version_dir):
+        os.rmdir(version_dir)
+
+def remove_mirror_list(mirror_dir, repo_id, patch_data):
+    print("Which patches are one-time (no updates required):")
+    print("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -")
+    for i, patch in enumerate(patch_data, start=1):
+        print(f"{i}. {patch}")
+    print("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -")
+    user_input = input(f"Select the appropriate patch numbers(1-{len(patch_data)}) separated by commas and/or spaces, or leave input blank to skip all options shown (Enter 'a' for all):")
+    user_options_list = re.split(r'[,\s]+',user_input.strip())
+    if user_options_list[0] != '' and user_options_list[0] != 'a':
+        try:
+            for i in user_options_list:
+                i = int(i)
+                if i>=1 and i <= len(user_options_list):
+                    delete_mirror_item(mirror_dir, repo_id, patch_data[i])
+                else:
+                    raise ValueError(f"Invalid option: {i}, skipped.")
+        except ValueError as v:
+            log.error(f"{str(v)}")
+            pass
+        except Exception as e:
+            log.error(f"An Error Occurred: {str(e)}")
+            sys.exit(1)
+    elif user_options_list[0] == 'a':
+        for i in patch_data:
+            delete_mirror_item(mirror_dir, repo_id, i)
+
+# 将新添加 patch 加入镜像站索引
+def build_index(thpatch_dir, repo_id, mirror_repo_url):
+    log.info(f"Adding index for {repo_id}...")
+    # 构建repo.js文件的路径
+    repo_path = os.path.join(thpatch_dir, 'repo.js')
+    
+    # 检查repo.js文件是否存在
+    if not os.path.exists(repo_path):
+        log.warning("The main server(thpatch repo) has not been established, skipped.")
+        return
+    
+    # 读取并验证JSON格式
+    try:
+        with open(repo_path, 'r', encoding='utf-8') as f:
+            repo_data = json.load(f)
+    except json.JSONDecodeError:
+        log.error("Failed to decode JSON from the response.")
+        sys.exit(1)
+    
+    # 检查必需的键是否存在
+    required_keys = ['contact', 'id', 'patches', 'servers', 'title']
+    if not all(key in repo_data for key in required_keys):
+        log.error("The repo.js file is missing a necessary key")
+        return
+    
+    # 检查并插入neighbors键
+    if 'neighbors' not in repo_data:
+        # 复制字典并插入新键
+        new_repo_data = {}
+        for key, value in repo_data.items():
+            new_repo_data[key] = value
+            if key == 'id':
+                new_repo_data['neighbors'] = []
+        repo_data = new_repo_data
+    
+    # 向neighbors中插入新的URL
+    if mirror_repo_url not in repo_data['neighbors']:
+        repo_data['neighbors'].append(mirror_repo_url)
+    
+    # 写回repo.js文件
+    with open(repo_path, 'w', encoding='utf-8') as f:
+        json.dump(repo_data, f, ensure_ascii=False, indent=4)
+    
+    log.succ(f"Add a new neighbor:{mirror_repo_url}")
+
 
 async def main():
     # 载入用户设置
@@ -343,6 +444,7 @@ async def main():
 
     # 检测到输入的 URL 为 repo 地址
     try:
+        patches_to_remove = []
         if mode == 1:
             plist = enumerate_patch(base_url)
             patch_input = input(f"Select the appropriate patch numbers(1-{len(plist)}) separated by commas and/or spaces, or leave input blank to select all options shown (Enter 'c' to cancel):")
@@ -350,32 +452,46 @@ async def main():
             # 用户一次加入多个 patch
             if 'c' not in lpmirror:
                 if lpmirror[0] != '':
+                    lpatch = []
                     for i in lpmirror:
                         i = int(i)
                         if i>=1 and i <= len(plist):
+                            lpatch.append(plist[i-1])
                             await mirror_patch_from_repo(base_url, repo_dir, repo_id, plist[i-1])
                         else:
-                            raise ValueError("Invalid number, Can't find the patch specificed.")
+                            raise ValueError(f"Invalid option: {i}, Skipped.")
+                    patches_to_remove = lpatch  
                 elif plist != []:
                     for i in plist:
                         await mirror_patch_from_repo(base_url, repo_dir, repo_id, i)
+                    patches_to_remove = plist
 
         # 检测到输入的 URL 为 patch 地址
         elif mode == 2:
             await mirror_patch_from_repo(base_url, repo_dir, repo_id)
-    except ValueError:
-        log.error(f"{str(e)}")
-        sys.exit(1)
+            patch_name = get_last_path_segment(base_url)
+            patches_to_remove = [patch_name]
+
+        # 对不需要同步的 patch 进行处理
+        if repo_id != config['thpatch'] and patches_to_remove:
+            remove_mirror_list(mirror_dir, repo_id, patches_to_remove)
+    except ValueError as v:
+        log.error(f"{str(v)}")
+        pass
     except Exception as e:
         log.error(f"An error occurred: {str(e)}")
         sys.exit(1)
 
     # 生成镜像站用 repo.js
-    generate_repo_js(repo_js,repo_dir,config['site_url'])
+    mirror_repo_url = format_url(urljoin(format_url(config['site_url']), repo_id))
+    generate_repo_js(repo_js,repo_dir,mirror_repo_url)
 
+    # 构建镜像站索引
+    if repo_id != 'thpatch':
+        thpatch_dir = os.path.join(config['mirror_dir'], config['thpatch'])
+        build_index(thpatch_dir, repo_id, mirror_repo_url)
 
-
-os.environ["http_proxy"] = "http://127.0.0.1:7890"
-os.environ["https_proxy"] = "http://127.0.0.1:7890"
+# os.environ["http_proxy"] = "http://127.0.0.1:7890"
+# os.environ["https_proxy"] = "http://127.0.0.1:7890"
 
 asyncio.run(main())
