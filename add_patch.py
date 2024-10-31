@@ -162,7 +162,7 @@ async def download_patch(base_url, pfn, patch_dir, file_semaphore, rate_limit_kb
         try:
             async with file_semaphore:
                 file_url = urljoin(format_url(base_url), f"{pfn}?=2233") # 合成文件的完整URL
-                file_path = os.path.join(patch_dir,pfn)  # 合成文件保存路径
+                file_path = os.path.normpath(os.path.join(patch_dir, pfn))  # 合成文件保存路径
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)  # 创建目录
                 file_name = os.path.basename(file_path)
                 file_dir = os.path.dirname(file_path)
@@ -179,6 +179,11 @@ async def download_patch(base_url, pfn, patch_dir, file_semaphore, rate_limit_kb
                                 # Calculate sleep time to enforce rate limit
                                 time_to_sleep = len(chunk) / rate_limit_bps
                                 await asyncio.sleep(time_to_sleep)
+
+
+                # 如果目标文件已存在，先删除
+                if os.path.exists(file_path):
+                    os.remove(file_path)
 
                 # 重命名文件为最终名称
                 os.rename(temp_file_path, file_path)
@@ -357,7 +362,7 @@ def remove_mirror_list(mirror_dir, repo_id, patch_data):
                 if i>=1 and i <= len(user_options_list):
                     delete_mirror_item(mirror_dir, repo_id, patch_data[i])
                 else:
-                    raise ValueError(f"Invalid option: {i}, skipped.")
+                    raise ValueError(f"Invalid option: {i}, skipping.")
         except ValueError as v:
             log.error(f"{str(v)}")
             pass
@@ -376,7 +381,7 @@ def build_index(thpatch_dir, repo_id, mirror_repo_url):
     
     # 检查repo.js文件是否存在
     if not os.path.exists(repo_path):
-        log.warning("The main server(thpatch repo) has not been established, skipped.")
+        log.warning("The main server(thpatch repo) has not been established, skipping.")
         return
     
     # 读取并验证JSON格式
@@ -459,7 +464,7 @@ async def main():
                             lpatch.append(plist[i-1])
                             await mirror_patch_from_repo(base_url, repo_dir, repo_id, plist[i-1])
                         else:
-                            raise ValueError(f"Invalid option: {i}, Skipped.")
+                            raise ValueError(f"Invalid option: {i}, skipping.")
                     patches_to_remove = lpatch  
                 elif plist != []:
                     for i in plist:
@@ -490,8 +495,5 @@ async def main():
     if repo_id != 'thpatch':
         thpatch_dir = os.path.join(config['mirror_dir'], config['thpatch'])
         build_index(thpatch_dir, repo_id, mirror_repo_url)
-
-# os.environ["http_proxy"] = "http://127.0.0.1:7890"
-# os.environ["https_proxy"] = "http://127.0.0.1:7890"
 
 asyncio.run(main())
