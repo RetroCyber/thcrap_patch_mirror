@@ -449,8 +449,8 @@ async def main():
             repo_dir = os.path.join(mirror_dir, repo_id)
             repo_build(repo_dir, repo_dir)
 
-        # 删除更新状态文件
-        if os.path.exists(update_path):
-            os.remove(update_path)
+    # 删除更新状态文件
+    if os.path.exists(update_path):
+        os.remove(update_path)
 
 asyncio.run(main())
