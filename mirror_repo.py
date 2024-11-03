@@ -29,6 +29,15 @@ parser.add_argument(
     type=str,
     dest='m'
     )
+class UpdateInfo(Enum):
+    checksum = 0
+    upd_mode = 1 
+
+
+# 获取 patch 文件更新列表以及更新模式
+class UpdateMode(Enum):
+    REMOVE = "r"
+    UPDATE = "u"
 
 # 对 URL 进行格式化
 def format_url(url):
@@ -152,11 +161,6 @@ async def check_update(mirror_dir):
 
     return update_list
 
-# 获取 patch 文件更新列表以及更新模式
-class UpdateMode(Enum):
-    REMOVE = "r"
-    UPDATE = "u"
-
 async def fetch_update_list(patch_dir, patch_url):
     update_list = {}
 
@@ -194,14 +198,14 @@ async def fetch_update_list(patch_dir, patch_url):
             origin_hash = origin_filelist.get(pfn)
             if local_hash is not None and origin_hash is None:
                 # update_list[pfn] = UpdateMode.REMOVE
-                update_list[pfn] = [local_hash, UpdateMode.REMOVE]
+                update_list[pfn] = [local_hash, UpdateMode.REMOVE.value]
             elif origin_hash is not None and local_hash != origin_hash:
                 # update_list[pfn] = UpdateMode.UPDATE
-                update_list[pfn] = [origin_hash, UpdateMode.UPDATE]
+                update_list[pfn] = [origin_hash, UpdateMode.UPDATE.value]
         for pfn, origin_hash in origin_filelist.items():
             if pfn not in local_filelist and origin_hash is not None:
                 # update_list[pfn] = UpdateMode.UPDATE
-                update_list[pfn] = [origin_hash, UpdateMode.UPDATE]
+                update_list[pfn] = [origin_hash, UpdateMode.UPDATE.value]
 
     return update_list
 
@@ -214,7 +218,7 @@ def save_update_list(mirror_dir, repo_id, patch, patch_dir, patch_url, new_hash,
         "patch_dir": patch_dir,
         "patch_url": patch_url,
         "new_hash": new_hash,
-        "files": {pfn: [info[0], info[1]] for pfn, info in update_list.items()}
+        "files": {pfn: [info[UpdateInfo.checksum.value], info[UpdateInfo.upd_mode.value]] for pfn, info in update_list.items()}
     }
     
     # 定义文件路径
@@ -347,11 +351,10 @@ async def process_update(patch_dir, patch_url, update_list):
 
     # 遍历update_list，将键放入对应的列表
     for pfn, upd_info in update_list.items():
-        for (checksum, upd_mode) in upd_info:
-            if upd_mode == UpdateMode.UPDATE:
-                ld.append(pfn)
-            elif upd_mode == UpdateMode.REMOVE:
-                lr.append(pfn)
+        if upd_info[UpdateInfo.checksum.value] == UpdateMode.UPDATE.value:
+            ld.append(pfn)
+        elif upd_info[UpdateInfo.upd_mode.value] == UpdateMode.REMOVE.value:
+            lr.append(pfn)
 
     # 创建一个信号量，限制最大并发数为5
     file_semaphore = asyncio.Semaphore(5)
