@@ -194,14 +194,14 @@ async def fetch_update_list(patch_dir, patch_url):
             origin_hash = origin_filelist.get(pfn)
             if local_hash is not None and origin_hash is None:
                 # update_list[pfn] = UpdateMode.REMOVE
-                update_list[pfn].extend([local_hash, UpdateMode.REMOVE])
+                update_list[pfn] = [local_hash, UpdateMode.REMOVE]
             elif origin_hash is not None and local_hash != origin_hash:
                 # update_list[pfn] = UpdateMode.UPDATE
-                update_list[pfn].extend([origin_hash, UpdateMode.UPDATE])
+                update_list[pfn] = [origin_hash, UpdateMode.UPDATE]
         for pfn, origin_hash in origin_filelist.items():
             if pfn not in local_filelist and origin_hash is not None:
                 # update_list[pfn] = UpdateMode.UPDATE
-                update_list[pfn].extend([origin_hash, UpdateMode.UPDATE])
+                update_list[pfn] = [origin_hash, UpdateMode.UPDATE]
 
     return update_list
 
