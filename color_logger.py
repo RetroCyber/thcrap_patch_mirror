@@ -22,7 +22,7 @@ logging.addLevelName(UPDATE_LEVEL_NUM, "UPDATE")
 logging.addLevelName(REMOVE_LEVEL_NUM, "REMOVE")
 
 class ColorLogger:
-    def __init__(self, name=__name__, log_to_file=False, log_dir="./logs"):
+    def __init__(self, name=__name__, log_to_file=False, log_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
 

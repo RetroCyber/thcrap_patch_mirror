@@ -11,13 +11,24 @@ import json
 import asyncio
 import os
 import sys
-from repo_update import repo_build, enter_missing
+import argparse
+from repo_update import repo_build
 from color_logger import ColorLogger
 from urllib.parse import urljoin
 from hashlib import sha256
 from enum import Enum
+from zlib import crc32
 
 log = ColorLogger(log_to_file=True).logger
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-m","--mirror",
+    metavar="path",
+    help="The path to be mirrored",
+    default='.',
+    type=str,
+    dest='m'
+    )
 
 # 对 URL 进行格式化
 def format_url(url):
@@ -25,8 +36,24 @@ def format_url(url):
         return url + '/'
     return url
 
+# 获取文件 CRC32 校验和
+def calculate_crc32(file_path):
+    try:
+        with open(file_path, 'rb') as f:
+            checksum = 0
+            while chunk := f.read(4096):  # 分块读取文件
+                checksum = crc32(chunk, checksum)
+            # 返回CRC32值，转换为无符号整数
+            return checksum & 0xFFFFFFFF
+    except FileNotFoundError:
+        log.error("File not found.")
+        return None
+    except Exception as e:
+        log.error(f"An error occurred: {e}")
+        return None
+
 # 获取用户镜像站路径
-def load_custom_dir():
+def load_custom_dir(user_arg):
 
     # 获取脚本所在目录
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -54,13 +81,13 @@ def load_custom_dir():
                     json.dump({'mirror_dir': data['mirror_dir']}, mirror_file, indent=4)
                 return data['mirror_dir']
 
-    # 如果两个文件都不存在，要求用户输入路径
+    # 如果两个文件都不存在，从参数获取路径
     else:
         user_path = {}
-        enter_missing(user_path, 'mirror_dir', "Please provide your directory of mirror site: ")
-        
         # 格式化路径，确保以斜杠结尾
-        user_path['mirror_dir'] = os.path.join(user_path['mirror_dir'].strip(), '')
+        if user_arg == '.':
+            log.info("No path is specified, using the current path.")
+        user_path['mirror_dir'] = os.path.join(os.path.abspath(user_arg.strip()), '')
         with open(mirror_file_path, 'w') as mirror_file:
             json.dump(user_path, mirror_file, indent=4)
         return user_path['mirror_dir']
@@ -119,9 +146,9 @@ async def check_update(mirror_dir):
             if current_hash != new_hash:
                 if repo_id not in update_list:
                     update_list[repo_id] = []
-                update_list[repo_id].append([patch, patch_url, current_hash, new_hash])
+                update_list[repo_id].append([patch, patch_url, new_hash])
                 log.info(f"{patch} have a new version!")
-        log.info("Finished check.")
+        log.info("Check finished.")
 
     return update_list
 
@@ -166,14 +193,88 @@ async def fetch_update_list(patch_dir, patch_url):
         for pfn, local_hash in local_filelist.items():
             origin_hash = origin_filelist.get(pfn)
             if local_hash is not None and origin_hash is None:
-                update_list[pfn] = UpdateMode.REMOVE
+                # update_list[pfn] = UpdateMode.REMOVE
+                update_list[pfn].extend([local_hash, UpdateMode.REMOVE])
             elif origin_hash is not None and local_hash != origin_hash:
-                update_list[pfn] = UpdateMode.UPDATE
+                # update_list[pfn] = UpdateMode.UPDATE
+                update_list[pfn].extend([origin_hash, UpdateMode.UPDATE])
         for pfn, origin_hash in origin_filelist.items():
             if pfn not in local_filelist and origin_hash is not None:
-                update_list[pfn] = UpdateMode.UPDATE
+                # update_list[pfn] = UpdateMode.UPDATE
+                update_list[pfn].extend([origin_hash, UpdateMode.UPDATE])
 
     return update_list
+
+# 保存当前更新列表，防止脚本意外中断
+def save_update_list(mirror_dir, repo_id, patch, patch_dir, patch_url, new_hash, update_list):
+    # 构建需要写入的temp_update_info数据结构
+    temp_update_info = {
+        "repo_id": repo_id,
+        "patch": patch,
+        "patch_dir": patch_dir,
+        "patch_url": patch_url,
+        "new_hash": new_hash,
+        "files": {pfn: [info[0], info[1]] for pfn, info in update_list.items()}
+    }
+    
+    # 定义文件路径
+    update_file_path = os.path.join(mirror_dir, '__update.json')
+    
+    # 将temp_update_info写入到__update.json中，若文件已存在则覆盖
+    with open(update_file_path, 'w', encoding='utf-8') as f:
+        json.dump(temp_update_info, f, ensure_ascii=False, indent=4)
+
+# 载入上次意外中断的更新信息
+def load_last_info(mirror_dir):
+    update_file_path = os.path.join(mirror_dir, "__update.json")
+    
+    # Check if the __update.json file exists
+    if not os.path.exists(update_file_path):
+        return None
+    
+    # Load the update info from the JSON file
+    with open(update_file_path, "r") as update_file:
+        update_info = json.load(update_file)
+    
+    repo_id = update_info.get("repo_id", "")
+    patch = update_info.get("patch", "")
+    patch_dir = update_info.get("patch_dir", "")
+    patch_url = update_info.get("patch_url", "")
+    new_hash = update_info.get("new_hash", "")
+    files_info = update_info.get("files", {})
+    
+    update_list = {}
+    
+    for pfn, (checksum, upd_mode) in files_info.items():
+        file_path = os.path.join(patch_dir, pfn)
+        
+        # Check if the file exists
+        if not os.path.exists(file_path):
+            continue
+        
+        # Calculate the CRC32 checksum of the file
+        file_checksum = calculate_crc32(file_path)
+        
+        # If checksum matches, skip this file
+        if file_checksum == checksum:
+            continue
+        
+        # Otherwise, add it to the update list
+        update_list[pfn] = [checksum, upd_mode]
+    
+    # Return the results
+    return repo_id, patch, patch_dir, patch_url, new_hash, update_list
+
+# 完成上次更新
+async def finish_last_update(mirror_dir):
+    # 载入中断状态
+    repo_id, patch, patch_dir, patch_url, new_hash, lupd = load_last_info(mirror_dir)
+    if lupd:
+        await process_update(patch_dir, patch_url, lupd)
+        remove_old_filelist(patch_dir)
+        update_version_info(mirror_dir, repo_id, patch, new_hash)
+        repo_dir = os.path.join(mirror_dir, repo_id)
+        repo_build(repo_dir, repo_dir)
 
 # 更新 patch 文件
 async def fetch_update(patch_url, pfn, patch_dir, file_semaphore, rate_limit_kbps=1024, max_retries=5):
@@ -245,11 +346,12 @@ async def process_update(patch_dir, patch_url, update_list):
     lr = []
 
     # 遍历update_list，将键放入对应的列表
-    for pfn, upd_mode in update_list.items():
-        if upd_mode == UpdateMode.UPDATE:
-            ld.append(pfn)
-        elif upd_mode == UpdateMode.REMOVE:
-            lr.append(pfn)
+    for pfn, upd_info in update_list.items():
+        for (checksum, upd_mode) in upd_info:
+            if upd_mode == UpdateMode.UPDATE:
+                ld.append(pfn)
+            elif upd_mode == UpdateMode.REMOVE:
+                lr.append(pfn)
 
     # 创建一个信号量，限制最大并发数为5
     file_semaphore = asyncio.Semaphore(5)
@@ -310,7 +412,17 @@ def update_version_info(mirror_dir, repo_id, patch, new_hash):
 async def main():
 
     # 载入用户设置的镜像站路径
-    mirror_dir = load_custom_dir()
+    args = parser.parse_args()
+    mirror_dir = load_custom_dir(args.m)
+
+    # 若上次更新发生中断则优先完成
+    update_path = os.path.join(mirror_dir, "__update.json")
+    log.info("Checking if last update interrupt...")
+    if os.path.exists(update_path):
+        log.info("Exception interrupt detected! Recovering...")
+        await finish_last_update(mirror_dir)
+    else:
+        log.info("Check finished.")
 
     # 检查 patch 更新
     check_list = await check_update(mirror_dir)
@@ -319,12 +431,13 @@ async def main():
             # 遍历欲更新 patch 列表
         for repo_id, patch_info in check_list.items():
             # 遍历 repo 内所包含的 patch 信息
-            for patch, patch_url, current_hash, new_hash in patch_info:
+            for patch, patch_url, new_hash in patch_info:
                 patch_dir = os.path.join(mirror_dir, repo_id, patch)
                 lupd = await fetch_update_list(patch_dir, patch_url)
 
                 # 进行 patch 文件更新
                 if lupd:
+                    save_update_list(mirror_dir, repo_id, patch, patch_dir, patch_url, new_hash)
                     await process_update(patch_dir, patch_url, lupd)
                     remove_old_filelist(patch_dir)
                     update_version_info(mirror_dir, repo_id, patch, new_hash)
@@ -332,5 +445,9 @@ async def main():
             # 在当前 repo_id 的所有元素处理完之后调用 repo_build()
             repo_dir = os.path.join(mirror_dir, repo_id)
             repo_build(repo_dir, repo_dir)
+
+        # 删除更新状态文件
+        if os.path.exists(update_path):
+            os.remove(update_path)
 
 asyncio.run(main())
