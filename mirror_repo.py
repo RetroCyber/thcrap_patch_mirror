@@ -351,7 +351,7 @@ async def process_update(patch_dir, patch_url, update_list):
 
     # 遍历update_list，将键放入对应的列表
     for pfn, upd_info in update_list.items():
-        if upd_info[UpdateInfo.checksum.value] == UpdateMode.UPDATE.value:
+        if upd_info[UpdateInfo.upd_mode.value] == UpdateMode.UPDATE.value:
             ld.append(pfn)
         elif upd_info[UpdateInfo.upd_mode.value] == UpdateMode.REMOVE.value:
             lr.append(pfn)
