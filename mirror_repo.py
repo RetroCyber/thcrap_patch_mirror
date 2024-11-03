@@ -437,7 +437,7 @@ async def main():
 
                 # 进行 patch 文件更新
                 if lupd:
-                    save_update_list(mirror_dir, repo_id, patch, patch_dir, patch_url, new_hash)
+                    save_update_list(mirror_dir, repo_id, patch, patch_dir, patch_url, new_hash, lupd)
                     await process_update(patch_dir, patch_url, lupd)
                     remove_old_filelist(patch_dir)
                     update_version_info(mirror_dir, repo_id, patch, new_hash)
