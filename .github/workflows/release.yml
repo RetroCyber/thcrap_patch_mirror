@@ -24,7 +24,7 @@ jobs:
     - name: Check for Python changes
       id: check_python
       run: |
-        if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '\.py$'; then
+        if (git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '\.py$'); then
           echo "Python files were changed."
           echo "::set-output name=python_changed::true"
         else
