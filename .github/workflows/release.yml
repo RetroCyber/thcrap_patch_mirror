@@ -23,8 +23,9 @@ jobs:
 
     - name: Check for Python changes
       id: check_python
+      shell: bash
       run: |
-        if (git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '\.py$'); then
+        if git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q '\.py$' ; then
           echo "Python files were changed."
           echo "::set-output name=python_changed::true"
         else
@@ -49,7 +50,7 @@ jobs:
       if: steps.check_python.outputs.python_changed == 'true'
       run: |
         if [ "${{ matrix.os }}" == "windows-latest" ]; then
-          zip thpatch_mirror.zip dist/add_patch.exe dist/mirror_repo.exe
+          powershell -Command "Compress-Archive -Path dist\add_patch.exe, dist\mirror_repo.exe -DestinationPath thpatch_mirror.zip"
         elif [ "${{ matrix.os }}" == "macos-latest" ]; then
           tar -czf thpatch_mirror.tar.gz dist/add_patch dist/mirror_repo
         else
