@@ -58,7 +58,7 @@ jobs:
 
     - name: Upload Package
       if: steps.check_python.outputs.python_changed == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: thpatch_mirror-${{ matrix.os }}
         path: |
