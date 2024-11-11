@@ -40,13 +40,13 @@ class UpdateMode(Enum):
     UPDATE = "u"
 
 # 对 URL 进行格式化
-def format_url(url):
+def format_url(url: str):
     if not url.endswith('/'):
         return url + '/'
     return url
 
 # 获取文件 CRC32 校验和
-def calculate_crc32(file_path):
+def calculate_crc32(file_path: str):
     try:
         with open(file_path, 'rb') as f:
             checksum = 0
@@ -62,7 +62,7 @@ def calculate_crc32(file_path):
         return None
 
 # 获取用户镜像站路径
-def load_custom_dir(user_arg):
+def load_custom_dir(user_arg: str):
 
     # 获取脚本所在目录
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -102,7 +102,7 @@ def load_custom_dir(user_arg):
         return user_path['mirror_dir']
 
 # 获取镜像 patch 版本数据
-async def fetch_patch_ver(patch_ver):
+async def fetch_patch_ver(patch_ver: str):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(patch_ver)
@@ -113,7 +113,7 @@ async def fetch_patch_ver(patch_ver):
             sys.exit(1)
 
 # 检查 repo 更新
-async def check_update(mirror_dir):
+async def check_update(mirror_dir: str):
     update_list = {}
     version_dir = os.path.join(mirror_dir, '.version')
     if not os.path.exists(version_dir):
@@ -161,7 +161,7 @@ async def check_update(mirror_dir):
 
     return update_list
 
-async def fetch_update_list(patch_dir, patch_url):
+async def fetch_update_list(patch_dir: str, patch_url: str):
     update_list = {}
 
     async with httpx.AsyncClient() as client:
@@ -210,7 +210,7 @@ async def fetch_update_list(patch_dir, patch_url):
     return update_list
 
 # 保存当前更新列表，防止脚本意外中断
-def save_update_list(mirror_dir, repo_id, patch, patch_dir, patch_url, new_hash, update_list):
+def save_update_list(mirror_dir: str, repo_id: str, patch: str, patch_dir: str, patch_url: str, new_hash: str, update_list):
     # 构建需要写入的temp_update_info数据结构
     temp_update_info = {
         "repo_id": repo_id,
@@ -229,7 +229,7 @@ def save_update_list(mirror_dir, repo_id, patch, patch_dir, patch_url, new_hash,
         json.dump(temp_update_info, f, ensure_ascii=False, indent=4)
 
 # 载入上次意外中断的更新信息
-def load_last_info(mirror_dir):
+def load_last_info(mirror_dir: str):
     update_file_path = os.path.join(mirror_dir, "__update.json")
     
     # Check if the __update.json file exists
@@ -270,7 +270,7 @@ def load_last_info(mirror_dir):
     return repo_id, patch, patch_dir, patch_url, new_hash, update_list
 
 # 完成上次更新
-async def finish_last_update(mirror_dir):
+async def finish_last_update(mirror_dir: str):
     # 载入中断状态
     repo_id, patch, patch_dir, patch_url, new_hash, lupd = load_last_info(mirror_dir)
     if lupd:
@@ -281,7 +281,7 @@ async def finish_last_update(mirror_dir):
         repo_build(repo_dir, repo_dir)
 
 # 更新 patch 文件
-async def fetch_update(patch_url, pfn, patch_dir, file_semaphore, rate_limit_kbps=1024, max_retries=5):
+async def fetch_update(patch_url: str, pfn: str, patch_dir: str, file_semaphore, rate_limit_kbps=1024, max_retries=5):
     rate_limit_bps = rate_limit_kbps * 1024
     retry_count = 0
     success = False
@@ -323,7 +323,7 @@ async def fetch_update(patch_url, pfn, patch_dir, file_semaphore, rate_limit_kbp
                 log.error(f"Failed to download {file_path} after {max_retries} retries.")
 
 # 清理过时的 patch 文件
-def clean_patch(patch_dir, pfn):
+def clean_patch(patch_dir: str, pfn: str):
     # 合成补丁文件路径
     pf_dir = os.path.join(patch_dir, pfn)
     
@@ -345,7 +345,7 @@ def clean_patch(patch_dir, pfn):
             break
 
 # 处理 patch 文件更新
-async def process_update(patch_dir, patch_url, update_list):
+async def process_update(patch_dir: str, patch_url: str, update_list):
     ld = []
     lr = []
 
@@ -369,7 +369,7 @@ async def process_update(patch_dir, patch_url, update_list):
     log.succ("Finished clean!")
 
 # 删除原有文件列表(files.js)
-def remove_old_filelist(patch_dir):
+def remove_old_filelist(patch_dir: str):
     # 构建files.js文件的完整路径
     files_js_path = os.path.join(patch_dir, 'files.js')
     
@@ -381,7 +381,7 @@ def remove_old_filelist(patch_dir):
         log.info(f"{files_js_path} does not exist, no need to delete.")
 
 # 更新 patch 版本信息
-def update_version_info(mirror_dir, repo_id, patch, new_hash):
+def update_version_info(mirror_dir: str, repo_id: str, patch: str, new_hash: str):
     # 构建文件路径
     file_path = os.path.join(mirror_dir, '.version', f'{repo_id}.json')
     

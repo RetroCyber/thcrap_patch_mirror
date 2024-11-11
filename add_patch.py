@@ -1,12 +1,13 @@
 # 镜像站用添加补丁脚本
 # 功能：
 # 1.可直接输入仓库(repo)或补丁(patch)的 URL 进行添加
-# 2.给定仓库(repo) URL，列举其下所有补丁(patch)，选择添加
+# 2.给定仓库(repo)URL，列举其下所有补丁(patch)，选择添加
 # 3.引导用户生成自定义配置文件，可供镜像脚本(mirror_patch.py)使用
 # 4.自动调用 repo_update.py 构建补丁，允许thcrap直接下载使用
 import httpx
 import json
 import asyncio
+import aiofiles
 import os
 import re
 import sys
@@ -14,8 +15,17 @@ from repo_update import repo_build, enter_missing
 from color_logger import ColorLogger
 from urllib.parse import urljoin, urlparse
 from hashlib import sha256
+from zlib import crc32
+from dataclasses import dataclass
 
 log = ColorLogger().logger
+
+@dataclass(frozen=True)
+class ADD_MODE:
+    ADD_REPO: int = 1
+    ADD_PATCH: int = 2
+
+add_mode = ADD_MODE()
 
 # 载入用户配置
 def load_config():
@@ -62,13 +72,13 @@ def custom_config():
     return config
 
 # 对 URL 进行格式化
-def format_url(url):
+def format_url(url: str):
     if not url.endswith('/'):
         return url + '/'
     return url
 
 # 获取 URL 最后一级
-def get_last_path_segment(url):
+def get_last_path_segment(url: str):
     parsed_url = urlparse(url)
     path = parsed_url.path
 
@@ -80,8 +90,36 @@ def get_last_path_segment(url):
     last_segment = path.split('/')[-1]
     return last_segment
 
+# 获取文件 CRC32 校验和
+async def calculate_crc32(file_path: str):
+    try:
+        async with aiofiles.open(file_path, 'rb') as f:
+            checksum = 0
+            while True:
+                chunk = await f.read(4096)  # 异步分块读取文件
+                if not chunk:
+                    break
+                checksum = crc32(chunk, checksum)
+        # 返回CRC32值，转换为无符号整数
+        return checksum & 0xFFFFFFFF
+    except FileNotFoundError:
+        log.error("File not found.")
+        return None
+    except Exception as e:
+        log.error(f"An error occurred: {e}")
+        return None
+
+# 校验已下载的文件是否完整
+async def check_file(pfn: str, checksum: int, dp_dir: str):
+    pf_path = os.path.join(dp_dir, pfn)
+    if os.path.exists(pf_path):
+        file_checksum = await calculate_crc32(pf_path)
+        if file_checksum == checksum:
+            return True
+    return False
+
 # 获取 patch 文件列表信息
-async def fetch_patch_file_info(patch_url):
+async def fetch_patch_file_info(patch_url: str):
 
     # 合成 files.js 的完整 URL
     files_js_url = urljoin(format_url(patch_url), "files.js?=2233")
@@ -93,17 +131,17 @@ async def fetch_patch_file_info(patch_url):
         json_data = response.json()
 
         # 获取 patch 文件信息键值对，舍弃空值项（远端文件已删除）
-        file_url_keys = [key for key, value in json_data.items() if value is not None]
-        return file_url_keys
+        file_info = {key: value for key, value in json_data.items() if value is not None}
+        return file_info
 
 # 获取 repo 信息（repo.js 内容）
-async def fetch_repo_info(url, mode):
+async def fetch_repo_info(url: str, am=add_mode.ADD_REPO):
     async with httpx.AsyncClient() as client:
         try:
-            if mode == 1:
+            if am == add_mode.ADD_REPO:
                 # Mode 1: Directly append 'repo.js' to the repo URL
                 repo_js_url = urljoin(url, 'repo.js')
-            elif mode == 2:
+            elif am == add_mode.ADD_PATCH:
                 # Mode 2: Assume the URL is for a patch, go one level up to get 'repo.js'
                 repo_js_url = urljoin(url, '../repo.js')
             else:
@@ -128,7 +166,7 @@ async def fetch_repo_info(url, mode):
             sys.exit(1)
 
 # 生成镜像 patch 版本数据
-async def fetch_patch_ver(patch_ver):
+async def fetch_patch_ver(patch_ver: str):
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(patch_ver)
@@ -139,7 +177,7 @@ async def fetch_patch_ver(patch_ver):
             sys.exit(1)
 
 # 生成镜像站用 repo.js
-def generate_repo_js(repo_js, repo_dir, servers):
+def generate_repo_js(repo_js, repo_dir: str, servers: str):
     if repo_js.get('id') == 'thpatch':
         repo_build(repo_dir,repo_dir)
     else:
@@ -154,7 +192,7 @@ def generate_repo_js(repo_js, repo_dir, servers):
         repo_build(repo_dir,repo_dir)
 
 # 下载 patch 文件
-async def download_patch(base_url, pfn, patch_dir, file_semaphore, rate_limit_kbps=1024, max_retries=5):
+async def download_patch(base_url: str, pfn: str, patch_dir: str, file_semaphore, rate_limit_kbps=1024, max_retries=5):
     rate_limit_bps = rate_limit_kbps * 1024
     retry_count = 0
     success = False
@@ -197,13 +235,20 @@ async def download_patch(base_url, pfn, patch_dir, file_semaphore, rate_limit_kb
                 log.error(f"Failed to download {file_path} after {max_retries} retries.")
 
 # 从远端 repo 镜像指定 patch
-async def mirror_patch_from_repo(base_url, repo_dir, repo_id, ipatch=""):
+async def mirror_patch_from_repo(base_url: str, repo_dir: str, repo_id: str, ipatch=""):
 
     # 获取 patch 文件列表
     patch_url = urljoin(format_url(base_url), ipatch)
     pn = get_last_path_segment(patch_url)
     log.info(f"Mirroring {pn} ...")
-    flist = await fetch_patch_file_info(patch_url)
+    file_info = await fetch_patch_file_info(patch_url)
+    flist = list(file_info.keys())
+    mirror_dir = os.path.dirname(repo_dir)
+
+# 将ldpf数据转换为JSON数据并写入__files.js文件
+    ldpf_path = os.path.join(mirror_dir, "__files.js")
+    with open(ldpf_path, 'w', encoding='utf-8') as ldpf_file:
+        json.dump(file_info, ldpf_file, ensure_ascii=False, indent=4)
 
     # 生成补丁路径
     patch_dir = os.path.join(repo_dir, pn)
@@ -215,11 +260,10 @@ async def mirror_patch_from_repo(base_url, repo_dir, repo_id, ipatch=""):
 
     # 生成 patch 版本文件
     repo_url = urljoin(format_url(patch_url),'..')
-    mirror_dir = os.path.dirname(repo_dir)
     await generate_mirror_info(mirror_dir, repo_url, repo_id, pn)
 
 # 生成镜像 repo 版本信息
-async def generate_mirror_info(mirror_dir, repo_origin, repo_id, patch):
+async def generate_mirror_info(mirror_dir: str, repo_origin: str, repo_id: str, patch: str):
 
     # 创建 JSON 文件的路径
     json_file_path = os.path.join(mirror_dir, ".version", f"{repo_id}.json")
@@ -257,7 +301,7 @@ async def generate_mirror_info(mirror_dir, repo_origin, repo_id, patch):
         json.dump(data, f, indent=4)
 
 # 判断 URL 指向为 repo 还是 patch
-def IsRepoOrServer(url):
+def IsRepoOrServer(url: str):
     try:
             # 创建一个 HTTP 客户端 
             with httpx.Client() as client:
@@ -276,7 +320,7 @@ def IsRepoOrServer(url):
                 if response.status_code == 200:
                     log.succ("Find repo.js. This Repo contains:")
                     print("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -")
-                    return 1
+                    return add_mode.ADD_REPO
                 else:
 
                     # 检查 base_url + files.js 是否可访问
@@ -284,7 +328,7 @@ def IsRepoOrServer(url):
                     response = client.get(files_js_url, timeout=10)
                     if response.status_code == 200:
                         log.succ("Find files.js. Downloading...")
-                        return 2
+                        return add_mode.ADD_PATCH
                     else:
                         raise ValueError("Invalid URL, please check it to make sure is correct.")
     except httpx.RequestError as exc:
@@ -295,7 +339,7 @@ def IsRepoOrServer(url):
         sys.exit(1)
 
 # 枚举 repo 包含的 patch ，并返回 patch 列表
-def enumerate_patch(url):
+def enumerate_patch(url: str):
     """
     从指定URL获取JSON数据并解析，输出其中所包含的补丁(patch)，并返回补丁列表
     """
@@ -319,7 +363,7 @@ def enumerate_patch(url):
     return list(patches.keys())
 
 # 将不需要定期镜像的 patch 从镜像列表删除，以减少镜像开销。
-def delete_mirror_item(mirror_dir, repo_id, patch):
+def delete_mirror_item(mirror_dir: str, repo_id: str, patch: str):
     # 构造出 version_dir 路径
     version_dir = os.path.join(mirror_dir, '.version')
     
@@ -347,7 +391,7 @@ def delete_mirror_item(mirror_dir, repo_id, patch):
     if os.path.isdir(version_dir) and not os.listdir(version_dir):
         os.rmdir(version_dir)
 
-def remove_mirror_list(mirror_dir, repo_id, patch_data):
+def remove_mirror_list(mirror_dir: str, repo_id: str, patch_data: list):
     print("Which patches are one-time (no updates required):")
     print("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -")
     for i, patch in enumerate(patch_data, start=1):
@@ -374,7 +418,7 @@ def remove_mirror_list(mirror_dir, repo_id, patch_data):
             delete_mirror_item(mirror_dir, repo_id, i)
 
 # 将新添加 patch 加入镜像站索引
-def build_index(thpatch_dir, repo_id, mirror_repo_url):
+def build_index(thpatch_dir: str, repo_id: str, mirror_repo_url: str):
     log.info(f"Adding index for {repo_id}...")
     # 构建repo.js文件的路径
     repo_path = os.path.join(thpatch_dir, 'repo.js')
@@ -418,6 +462,114 @@ def build_index(thpatch_dir, repo_id, mirror_repo_url):
     
     log.succ(f"Add a new neighbor:{mirror_repo_url}")
 
+# 保存当前 patch 下载任务状态
+def save_add_info(mirror_dir: str, repo_id: str, repo_url: str, lp: list, dp: str):
+    # 创建add_info数据结构
+    add_info = {
+        "repo": repo_id,
+        "origin": repo_url,
+        "patches_task": lp,
+        "downloading": dp
+    }
+
+    # 确保mirror_dir路径存在
+    if not os.path.exists(mirror_dir):
+        os.makedirs(mirror_dir)
+
+    # 将add_info转换为JSON数据并写入__add.json文件
+    add_info_path = os.path.join(mirror_dir, "__add.json")
+    with open(add_info_path, 'w', encoding='utf-8') as add_info_file:
+        json.dump(add_info, add_info_file, ensure_ascii=False, indent=4)
+
+# 载入未完成 patch 状态信息
+def load_add_info(mirror_dir: str):
+    add_info_path = os.path.join(mirror_dir, "__add.json")
+    file_js_path = os.path.join(mirror_dir, "__files.js")
+    # Check if the __add.json file exists
+    if not os.path.exists(add_info_path):
+        return None
+
+    # Load the add info from the JSON file
+    with open(add_info_path, 'r') as add_info_file:
+        add_info = json.load(add_info_file)
+
+    with open(file_js_path, 'r') as f:
+        pf = json.load(f)
+    # Fetch the info from the file
+    repo_id = add_info.get("repo", "")
+    repo_url = add_info.get("origin", "")
+    lp = add_info.get("patches_task", [])
+    dp = add_info.get("downloading", "")
+
+    # Return the info
+    return repo_id, repo_url, lp, dp, pf
+
+# 删除临时 patch 状态信息
+def clean_add_info(mirror_dir: str):
+    add_info_path = os.path.join(mirror_dir, "__add.json")
+    file_js_path = os.path.join(mirror_dir, "__files.js")
+
+    if os.path.exists(add_info_path):
+        os.remove(add_info_path)
+    if os.path.exists(file_js_path):
+        os.remove(file_js_path)
+
+# 恢复上次因意外退出而中断的下载任务
+async def backup_task(config: dict):
+    mirror_dir = config['mirror_dir']
+    log.info("Check if the last download task was interrupted...")
+    load_res = load_add_info(mirror_dir)
+    if not isinstance(load_res, tuple):
+        log.info("No interrupt detected, skipping.")
+        return
+    else:
+        repo_id, repo_url, lp, dp, pf = load_add_info(mirror_dir)
+    log.info("Interrupted download detected! Recovering...")
+    repo_dir = os.path.join(mirror_dir, repo_id)
+    dp_dir = os.path.join(mirror_dir, dp)
+    patch_url = urljoin(format_url(repo_url), dp)
+    file_semaphore = asyncio.Semaphore(10)
+
+    # 创建文件检查任务
+    check_tasks = [check_file(pfn, checksum, dp_dir) for pfn, checksum in pf.items()]
+    check_res = await asyncio.gather(*check_tasks)
+
+    # 创建下载任务
+    download_tasks = []
+    for i, (pfn, checksum) in enumerate(pf.items()):
+        if not check_res[i]:  # 只有在文件不存在或校验失败时才下载
+            download_tasks.append(download_patch(patch_url, pfn, dp_dir, file_semaphore))
+    await asyncio.gather(*download_tasks)
+
+    await generate_mirror_info(mirror_dir, repo_url, repo_id, dp)
+
+    # 完成队列剩余下载任务
+    if lp:
+        lap = lp.copy()
+        for i in lp:
+            if i in lap:
+                lap.remove(i)
+            save_add_info(mirror_dir, repo_id, repo_url, lap, i)
+            await mirror_patch_from_repo(repo_url, repo_dir, repo_id, i)
+
+    # 生成镜像站用 repo.js
+    mirror_repo_url = format_url(urljoin(format_url(config['site_url']), repo_id))
+    repo_js = await fetch_repo_info(repo_url)
+    generate_repo_js(repo_js, repo_dir, repo_url)
+
+    # 构建镜像站索引
+    if repo_id != 'thpatch':
+        thpatch_dir = os.path.join(config['mirror_dir'], config['thpatch'])
+        build_index(thpatch_dir, repo_id, mirror_repo_url)
+
+    # 清理状态记录文件
+    clean_add_info(mirror_dir)
+
+    user_option = input("Download Completed! Continue to add? (Y/n):")
+    if user_option.upper() == 'Y':
+        pass
+    else:
+        sys.exit(0)
 
 async def main():
     # 载入用户设置
@@ -432,12 +584,15 @@ async def main():
     # 用户配置预处理
     mirror_dir = config['mirror_dir']
 
+    # 恢复未完成的下载任务（若存在）
+    await backup_task(config)
+
     # 用户输入 repo 或 patch 公共 URL
     base_url = input("Please input URL(Repo or Server):")
     base_url = format_url(base_url)
-    mode = IsRepoOrServer(base_url)
+    am = IsRepoOrServer(base_url)
 
-    repo_js = await fetch_repo_info(base_url, mode)
+    repo_js = await fetch_repo_info(base_url, am)
     repo_id = repo_js['id']
 
     # 欲加入官方库（thpatch库）时所作预处理
@@ -449,37 +604,46 @@ async def main():
 
     # 检测到输入的 URL 为 repo 地址
     try:
-        patches_to_remove = []
-        if mode == 1:
-            plist = enumerate_patch(base_url)
-            patch_input = input(f"Select the appropriate patch numbers(1-{len(plist)}) separated by commas and/or spaces, or leave input blank to select all options shown (Enter 'c' to cancel):")
-            lpmirror = re.split(r'[,\s]+',patch_input.strip())
+        lrmp = []
+        if am == add_mode.ADD_REPO:
+            lp = enumerate_patch(base_url)
+            patch_input = input(f"Select the appropriate patch numbers(1-{len(lp)}) separated by commas and/or spaces, or leave input blank to select all options shown (Enter 'c' to cancel):")
+            lu = re.split(r'[,\s]+',patch_input.strip())
             # 用户一次加入多个 patch
-            if 'c' not in lpmirror:
-                if lpmirror[0] != '':
-                    lpatch = []
-                    for i in lpmirror:
-                        i = int(i)
-                        if i>=1 and i <= len(plist):
-                            lpatch.append(plist[i-1])
-                            await mirror_patch_from_repo(base_url, repo_dir, repo_id, plist[i-1])
-                        else:
-                            raise ValueError(f"Invalid option: {i}, skipping.")
-                    patches_to_remove = lpatch  
-                elif plist != []:
-                    for i in plist:
+            if 'c' not in lu:
+                lmp = []
+                lap = []
+                if lu[0] != '':
+                    # 将字符串转换为整数，并过滤有效的下标
+                    try:
+                        indices = [int(i) for i in lu if i.isdigit()]
+                        lmp = [lp[i-1] for i in indices if 0 <= i-1 < len(lp)]
+                    except ValueError:
+                        log.error("Invalid input. Please ensure all inputs are numbers or 'c'.")
+                elif lp != []:
+                    lmp = lp
+
+                lap = lmp.copy()
+                if lmp:
+                    for i in lmp:
+                        if i in lap:
+                            lap.remove(i)
+                        save_add_info(mirror_dir, repo_id, base_url, lap, i)
                         await mirror_patch_from_repo(base_url, repo_dir, repo_id, i)
-                    patches_to_remove = plist
+
+                    lrmp = lmp
 
         # 检测到输入的 URL 为 patch 地址
-        elif mode == 2:
+        elif am == add_mode.ADD_PATCH:
+            repo_url = urljoin(base_url, "..")
+            pn = get_last_path_segment(base_url)
+            save_add_info(mirror_dir, repo_id, repo_url, [], pn)
             await mirror_patch_from_repo(base_url, repo_dir, repo_id)
-            patch_name = get_last_path_segment(base_url)
-            patches_to_remove = [patch_name]
+            lrmp = [pn]
 
         # 对不需要同步的 patch 进行处理
-        if repo_id != config['thpatch'] and patches_to_remove:
-            remove_mirror_list(mirror_dir, repo_id, patches_to_remove)
+        if repo_id != config['thpatch'] and lrmp:
+            remove_mirror_list(mirror_dir, repo_id, lrmp)
     except ValueError as v:
         log.error(f"{str(v)}")
         pass
@@ -495,5 +659,8 @@ async def main():
     if repo_id != 'thpatch':
         thpatch_dir = os.path.join(config['mirror_dir'], config['thpatch'])
         build_index(thpatch_dir, repo_id, mirror_repo_url)
+
+    # 清理状态记录文件
+    clean_add_info(mirror_dir)
 
 asyncio.run(main())
