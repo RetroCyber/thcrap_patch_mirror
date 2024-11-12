@@ -55,21 +55,24 @@ jobs:
     - name: Package executables on Windows
       if: runner.os == 'Windows'
       run: |
-        Compress-Archive -Path 'dist/add_patch.exe', 'dist/mirror_repo.exe' -DestinationPath thpatch_mirror.zip
+        mkdir -p dist/win
+        Move-Item -Path 'dist/add_patch.exe', 'dist/mirror_repo.exe' -Destination 'dist/win/'
       shell: pwsh
       working-directory: thcrap_patch_mirror
 
     - name: Package executables on Linux
       if: runner.os == 'Linux'
       run: |
-        tar -czf thpatch_mirror.tar.gz dist/add_patch dist/mirror_repo
+        mkdir -p dist/linux
+        mv dist/add_patch dist/mirror_repo dist/linux/
       shell: bash
       working-directory: thcrap_patch_mirror
 
-    - name: Package executables on Linux and macOS
+    - name: Package executables on macOS
       if: runner.os == 'macOS'
       run: |
-        tar -czf thpatch_mirror.tar.gz dist/add_patch dist/mirror_repo
+        mkdir -p dist/macos
+        mv dist/add_patch dist/mirror_repo dist/macos/
       shell: bash
       working-directory: thcrap_patch_mirror
 
@@ -79,8 +82,9 @@ jobs:
       with:
         name: thpatch_mirror-${{ matrix.os }}
         path: |
-          thcrap_patch_mirror/thpatch_mirror.tar.gz
-          thcrap_patch_mirror/thpatch_mirror.zip
+          dist/win/*
+          dist/linux/*
+          dist/macos/*
   
   # release:
   #   runs-on: ubuntu-latest
