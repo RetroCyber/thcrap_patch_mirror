@@ -75,8 +75,8 @@ jobs:
       with:
         name: thpatch_mirror-${{ matrix.os }}
         path: |
-          thpatch_mirror.zip
-          thpatch_mirror.tar.gz
+          dist/thpatch_mirror.zip
+          dist/thpatch_mirror.tar.gz
   
   release:
     runs-on: ubuntu-latest
