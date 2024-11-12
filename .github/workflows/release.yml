@@ -102,7 +102,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: build
-    if: needs.build.outputs.python_changed == 'true'
+    if: needs.build.steps.check_python.outputs.python_changed == 'true'
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -127,12 +127,12 @@ jobs:
     #   with:
     #     name: thpatch_mirror-macos
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          thpatch_mirror-win.zip
-          thpatch_mirror-linux.zip
-          thpatch_mirror-macos.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # - name: Create Release
+    #   uses: softprops/action-gh-release@v2
+    #   with:
+    #     files: |
+    #       thpatch_mirror-win.zip
+    #       thpatch_mirror-linux.zip
+    #       thpatch_mirror-macos.zip
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
