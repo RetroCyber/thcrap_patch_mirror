@@ -82,9 +82,9 @@ jobs:
       with:
         name: thpatch_mirror-${{ matrix.os }}
         path: |
-          dist/win/*
-          dist/linux/*
-          dist/macos/*
+          thcrap_patch_mirror/dist/win/*
+          thcrap_patch_mirror/dist/linux/*
+          thcrap_patch_mirror/dist/macos/*
   
   # release:
   #   runs-on: ubuntu-latest
