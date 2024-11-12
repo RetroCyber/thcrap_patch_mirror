@@ -56,6 +56,7 @@ jobs:
       if: runner.os == 'Windows'
       run: |
         Compress-Archive -Path 'dist/add_patch.exe', 'dist/mirror_repo.exe' -DestinationPath thpatch_mirror.zip
+        dir
       shell: pwsh
       working-directory: thcrap_patch_mirror
 
@@ -63,6 +64,7 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         tar -czf thpatch_mirror.tar.gz dist/add_patch dist/mirror_repo
+        ls -l
       shell: bash
       working-directory: thcrap_patch_mirror
 
@@ -70,6 +72,7 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         tar -czf thpatch_mirror.tar.gz dist/add_patch dist/mirror_repo
+        ls -l
       shell: bash
       working-directory: thcrap_patch_mirror
 
