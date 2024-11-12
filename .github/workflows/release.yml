@@ -17,7 +17,6 @@ jobs:
       # uses: actions/checkout@v2
       run: |
         git clone https://github.com/RetroCyber/thcrap_patch_mirror.git
-        cd thcrap_patch_mirror
 
 
     - name: Set up Python
@@ -43,6 +42,7 @@ jobs:
     - name: Install dependencies
       if: steps.check_python.outputs.python_changed == 'true'
       run: |
+        cd thcrap_patch_mirror
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
@@ -50,12 +50,14 @@ jobs:
     - name: Build executables
       if: steps.check_python.outputs.python_changed == 'true'
       run: |
+        cd thcrap_patch_mirror
         pyinstaller --onefile add_patch.py
         pyinstaller --onefile mirror_repo.py
 
     - name: Package executables
       if: steps.check_python.outputs.python_changed == 'true'
       run: |
+        cd thcrap_patch_mirror
         if [ "${{ matrix.os }}" == "windows-latest" ]; then
           powershell -Command "Compress-Archive -Path dist\add_patch.exe, dist\mirror_repo.exe -DestinationPath thpatch_mirror.zip"
         elif [ "${{ matrix.os }}" == "macos-latest" ]; then
