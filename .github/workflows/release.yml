@@ -76,6 +76,24 @@ jobs:
       shell: bash
       working-directory: thcrap_patch_mirror
 
+    - name: Set Platform Name
+    id: set_platform_name
+      run: |
+        if [[ "${{ matrix.os }}" == *"-latest" ]]; then
+          PLATFORM_NAME="${{ matrix.os/\-latest/ }}"
+          if [[ "${PLATFORM_NAME}" == "ubuntu" ]]; then
+            PLATFORM_NAME="linux"
+          elif [[ "${PLATFORM_NAME}" == "windows" ]]; then
+            PLATFORM_NAME="win"
+          elif [[ "${PLATFORM_NAME}" == "macos" ]]; then
+            PLATFORM_NAME="macos"
+          fi
+        else
+          PLATFORM_NAME="${{ matrix.os }}"
+        fi
+        echo "PLATFORM_NAME=${PLATFORM_NAME}" >> $GITHUB_ENV
+      shell: bash
+
     - name: Upload Package
       if: steps.check_python.outputs.python_changed == 'true'
       uses: actions/upload-artifact@v4
