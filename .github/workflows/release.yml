@@ -77,7 +77,7 @@ jobs:
       working-directory: thcrap_patch_mirror
 
     - name: Set Platform Name
-    id: set_platform_name
+      id: set_platform_name
       run: |
         if [[ "${{ matrix.os }}" == *"-latest" ]]; then
           PLATFORM_NAME="${{ matrix.os/\-latest/ }}"
