@@ -3,7 +3,7 @@
 # 1.可直接输入仓库(repo)或补丁(patch)的 URL 进行添加
 # 2.给定仓库(repo)URL，列举其下所有补丁(patch)，选择添加
 # 3.引导用户生成自定义配置文件，可供镜像脚本(mirror_patch.py)使用
-# 4.自动调用 repo_update.py 构建补丁，允许thcrap直接下载使用
+# 4.自动调用 repo_update.py 构建补丁，允许thcrap直接下载使用 
 import httpx
 import json
 import asyncio

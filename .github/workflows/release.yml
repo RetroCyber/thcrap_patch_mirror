@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    outputs:
+      python_changed: ${{ steps.check_python.outputs.python_changed }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
