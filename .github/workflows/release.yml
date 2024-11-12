@@ -14,13 +14,12 @@ jobs:
     
     steps:
     - name: Checkout repository
-      # uses: actions/checkout@v2
       run: |
         git clone https://github.com/RetroCyber/thcrap_patch_mirror.git
 
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
 
@@ -100,34 +99,40 @@ jobs:
           thcrap_patch_mirror/dist/linux/*
           thcrap_patch_mirror/dist/macos/*
   
-  # release:
-  #   runs-on: ubuntu-latest
-  #   needs: build
-  #   if: needs.build.outputs.python_changed == 'true'
-  #   steps:
-  #   - name: Checkout repository
-  #     uses: actions/checkout@v2
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: needs.build.outputs.python_changed == 'true'
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-  #   - name: Create Release
-  #     id: create_release
-  #     uses: actions/create-release@v1
-  #     env:
-  #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #     with:
-  #       tag_name: ${{ github.sha }}
-  #       release_name: Release ${{ github.sha }}
-  #       body: ${{ github.event.head_commit.message }}
-  #       draft: false
-  #       prerelease: false
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist
+    - run: ls -l dist
+    # - name: Download win
+    #   uses: actions/download-artifact@v4
+    #   with:
+    #     name: thpatch_mirror-win
 
-  #   - name: Upload Release Assets
-  #     uses: actions/upload-release-asset@v1
-  #     env:
-  #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #     with:
-  #       upload_url: ${{ steps.create_release.outputs.upload_url }}
-  #       asset_path: |
-  #         thpatch_mirror.zip
-  #         thpatch_mirror.tar.gz
-  #       asset_name: ${{ matrix.os }}_thpatch_mirror
-  #       asset_content_type: application/zip
+    # - name: Download linux
+    #   uses: actions/download-artifact@v4
+    #   with:
+    #     name: thpatch_mirror-linux
+    
+    # - name: Download macOS
+    #   uses: actions/download-artifact@v4
+    #   with:
+    #     name: thpatch_mirror-macos
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          thpatch_mirror-win.zip
+          thpatch_mirror-linux.zip
+          thpatch_mirror-macos.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
