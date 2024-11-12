@@ -67,11 +67,11 @@ jobs:
       working-directory: thcrap_patch_mirror
 
     - name: Package executables on Linux and macOS
-    if: runner.os == 'macOS'
-    run: |
-      tar -czf thpatch_mirror.tar.gz dist/add_patch dist/mirror_repo
-    shell: bash
-    working-directory: thcrap_patch_mirror
+      if: runner.os == 'macOS'
+      run: |
+        tar -czf thpatch_mirror.tar.gz dist/add_patch dist/mirror_repo
+      shell: bash
+      working-directory: thcrap_patch_mirror
 
     - name: Upload Package
       if: steps.check_python.outputs.python_changed == 'true'
