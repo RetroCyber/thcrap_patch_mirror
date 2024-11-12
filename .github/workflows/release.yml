@@ -79,17 +79,13 @@ jobs:
     - name: Set Platform Name
       id: set_platform_name
       run: |
-        if [[ "${{ matrix.os }}" == *"-latest" ]]; then
-          PLATFORM_NAME="${{ matrix.os/\-latest/ }}"
-          if [[ "${PLATFORM_NAME}" == "ubuntu" ]]; then
-            PLATFORM_NAME="linux"
-          elif [[ "${PLATFORM_NAME}" == "windows" ]]; then
-            PLATFORM_NAME="win"
-          elif [[ "${PLATFORM_NAME}" == "macos" ]]; then
-            PLATFORM_NAME="macos"
-          fi
-        else
-          PLATFORM_NAME="${{ matrix.os }}"
+        PLATFORM_NAME="${{ matrix.os }}"
+        if [[ "${PLATFORM_NAME}" == "ubuntu-latest" ]]; then
+          PLATFORM_NAME="linux"
+        elif [[ "${PLATFORM_NAME}" == "windows-latest" ]]; then
+          PLATFORM_NAME="win"
+        elif [[ "${PLATFORM_NAME}" == "macos-latest" ]]; then
+          PLATFORM_NAME="macos"
         fi
         echo "PLATFORM_NAME=${PLATFORM_NAME}" >> $GITHUB_ENV
       shell: bash
