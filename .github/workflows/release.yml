@@ -122,23 +122,23 @@ jobs:
     - name: Package the mirror script
       run: |
         cd ./dist
-        cd ./thpatch_mirror-win
-        zip -r ../thpatch_mirror_win.zip ./*
-        cd ..
-        cd ./thpatch_mirror-linux
-        tar -czvf ../thpatch_mirror_linux.tar.gz ./*
-        cd ..
-        cd ./thpatch_mirror-macos
-        tar -czvf ../thpatch_mirror_mac.tar.gz ./*
-        cd ..
-        ll
+        cd ./thpatch_mirror-win/win
+        zip -r ../../thpatch_mirror_win.zip ./*
+        cd ../..
+        cd ./thpatch_mirror-linux/linux
+        tar -czvf ../../thpatch_mirror_linux.tar.gz ./*
+        cd ../..
+        cd ./thpatch_mirror-macos/macos
+        tar -czvf ../../thpatch_mirror_mac.tar.gz ./*
+        cd ../..
+        ls -l
 
-    # - name: Create Release
-    #   uses: softprops/action-gh-release@v2
-    #   with:
-    #     files: |
-    #       thpatch_mirror-win.zip
-    #       thpatch_mirror-linux.zip
-    #       thpatch_mirror-macos.zip
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          thpatch_mirror-win.zip
+          thpatch_mirror-linux.zip
+          thpatch_mirror-macos.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
