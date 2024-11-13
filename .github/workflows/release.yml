@@ -121,13 +121,14 @@ jobs:
 
     - name: Package the mirror script
       run: |
-        cd ./dist/thpatch_mirror-win
+        cd ./dist
+        cd ./thpatch_mirror-win
         zip -r ../thpatch_mirror_win.zip ./*
         cd ..
-        cd ./dist/thpatch_mirror-linux
+        cd ./thpatch_mirror-linux
         tar -czvf ../thpatch_mirror_linux.tar.gz ./*
         cd ..
-        cd ./dist/thpatch_mirror-macos
+        cd ./thpatch_mirror-macos
         tar -czvf ../thpatch_mirror_mac.tar.gz ./*
         cd ..
         ll
