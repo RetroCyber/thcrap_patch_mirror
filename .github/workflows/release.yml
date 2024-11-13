@@ -121,5 +121,3 @@ jobs:
           ./dist/thpatch_mirror_win.zip
           ./dist/thpatch_mirror_linux.tar.gz
           ./dist/thpatch_mirror_mac.tar.gz
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
