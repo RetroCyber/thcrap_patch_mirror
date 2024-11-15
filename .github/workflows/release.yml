@@ -121,7 +121,7 @@ jobs:
     - name: Extract Release Notes
       id: extract_release_notes
       run: |
-        python release_note.py
+        python generate_release_note.py
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
