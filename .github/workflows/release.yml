@@ -113,10 +113,21 @@ jobs:
         tar -czvf ../../thpatch_mirror_mac.tar.gz ./*
         cd ../../
 
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Extract Release Notes
+      id: extract_release_notes
+      run: |
+        python release_note.py
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
+        body_path: ./release_note.md
         files: |
           ./dist/thpatch_mirror_win.zip
           ./dist/thpatch_mirror_linux.tar.gz
