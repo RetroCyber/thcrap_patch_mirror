@@ -1,3 +1,19 @@
+## v1.1
+
+Using UTF-8 codepage in scripts.
+
+### Add patch script (add_patch.py)
+
+* Modify the URL input prompt to improve accuracy.
+
+---
+
+在脚本中使用UTF-8代码页
+
+### 补丁添加脚本（Add_patch.py）
+
+* 修改输入URL提示以提升准确性
+
 ## v1.0
 
 ### Add patch script (add_patch.py)

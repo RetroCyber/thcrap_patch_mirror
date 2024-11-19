@@ -2,3 +2,4 @@ aiofiles
 colorama
 httpx
 pathspec
+dataclasses

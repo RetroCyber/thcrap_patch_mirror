@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # 镜像站用添加补丁脚本
 # 功能：
 # 1.可直接输入仓库(repo)或补丁(patch)的 URL 进行添加
@@ -588,7 +589,7 @@ async def main():
     await backup_task(config)
 
     # 用户输入 repo 或 patch 公共 URL
-    base_url = input("Please input URL(Repo or Server):")
+    base_url = input("Please input URL(Repo or Patch):")
     base_url = format_url(base_url)
     am = IsRepoOrServer(base_url)
 
